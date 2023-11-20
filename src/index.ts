@@ -16,7 +16,7 @@ client.on('messageCreate', async (message) => {
   const twitterUrlRegex =
     /https?:\/\/twitter\.com\/[a-zA-Z0-9_]{1,15}\/status\/\d+/
   const xUrlRegex = /https?:\/\/x\.com\/[a-zA-Z0-9_]{1,15}\/status\/\d+/
-  
+
   const urlMatches = message.content.match(twitterUrlRegex)
   const urlMatchesX = message.content.match(xUrlRegex)
   let url = null
@@ -27,13 +27,27 @@ client.on('messageCreate', async (message) => {
   }
   if (url !== null) {
     try {
+      const defaultStyles = 'src/puppeteer/style.css'
+
       const browser = await puppeteer.launch({
         args: generateBrowserSettings(),
       })
 
       const page = await browser.newPage()
-      await page.goto(url as string, { waitUntil: 'networkidle2' })
+      await page.emulateMediaFeatures([
+        { name: 'prefers-color-scheme', value: 'dark' },
+      ])
 
+      await page.setViewport({
+        width: 1440,
+        height: 900,
+      })
+      await page.goto(url as string, { waitUntil: 'networkidle2' })
+      await page.waitForSelector(
+        '.css-1dbjc4n.r-1p0dtai.r-12vffkv.r-u8s1d.r-13qz1uu',
+        { visible: true }
+      )
+      await page.addStyleTag({ path: defaultStyles })
       const screenshotBuffer = await page.screenshot()
       await message.reply({
         files: [{ attachment: screenshotBuffer, name: 'screenshot.png' }],
