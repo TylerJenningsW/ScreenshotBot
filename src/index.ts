@@ -27,8 +27,6 @@ client.on('messageCreate', async (message) => {
   }
   if (url !== null) {
     try {
-      const defaultStyles = 'src/puppeteer/style.css'
-
       const browser = await puppeteer.launch({
         args: generateBrowserSettings(),
       })
@@ -43,11 +41,19 @@ client.on('messageCreate', async (message) => {
         height: 900,
       })
       await page.goto(url as string, { waitUntil: 'networkidle2' })
-      await page.waitForSelector(
-        '.css-1dbjc4n.r-1p0dtai.r-12vffkv.r-u8s1d.r-13qz1uu',
-        { visible: true }
-      )
-      await page.addStyleTag({ path: defaultStyles })
+      await page.evaluate(() => {
+        let element = document.body
+        for (let i = 0; i < 6; i++) {
+          if (element && element.querySelector('div')) {
+            element = element.querySelector('div')!
+          } else {
+            return
+          }
+        }
+        if (element) {
+          element.style.display = 'none'
+        }
+      })
       const screenshotBuffer = await page.screenshot()
       await message.reply({
         files: [{ attachment: screenshotBuffer, name: 'screenshot.png' }],
