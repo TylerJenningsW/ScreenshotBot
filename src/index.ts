@@ -1,8 +1,7 @@
 import 'dotenv/config'
-import { Client } from 'discord.js'
+import { Client, EmbedBuilder } from 'discord.js'
 import puppeteer, { ElementHandle } from 'puppeteer'
 import { generateBrowserSettings } from './puppeteer/browserSettings'
-import { EmbedBuilder } from 'discord.js'
 
 const client = new Client({
   intents: ['Guilds', 'GuildMessages', 'GuildMembers', 'MessageContent'],
@@ -11,6 +10,7 @@ const client = new Client({
 client.on('ready', (c) => {
   console.log(`${c.user.username} is online.`)
 })
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return
 
@@ -22,6 +22,7 @@ client.on('messageCreate', async (message) => {
   const urlMatchesX = message.content.match(xUrlRegex)
   let url = null
   let user = null
+
   if (urlMatches) {
     url = urlMatches[0]
     user = 'https://twitter.com/' + urlMatches[1]
@@ -29,6 +30,7 @@ client.on('messageCreate', async (message) => {
     url = urlMatchesX[0]
     user = 'https://x.com/' + urlMatchesX[1]
   }
+
   if (url !== null) {
     try {
       const browser = await puppeteer.launch({
@@ -44,28 +46,13 @@ client.on('messageCreate', async (message) => {
         width: 1440,
         height: 900,
       })
-      let avatarUrl = null
+
       await page.goto(url as string, { waitUntil: 'networkidle2' })
-      await page.evaluate(() => {
-        let element = document.body
-        for (let i = 0; i < 6; i++) {
-          if (element && element.querySelector('div')) {
-            element = element.querySelector('div')!
-          } else {
-            return
-          }
-        }
-        if (element) {
-          element.style.display = 'none'
-        }
-      })
 
       const extractedText = await page.$eval(
         '*',
         (el) => (el as HTMLElement).innerText
       )
-
-      console.log(extractedText)
       let arrayText = extractedText.split('\n')
       let name = arrayText[4]
       let handle = arrayText[5]
@@ -77,49 +64,75 @@ client.on('messageCreate', async (message) => {
       let likes = null
       let rtIndex = 0
       let retweet = null
-      for (let i = 6; i < arrayText.length; i++) {
+      let tweetStart = 6
+      let imgIndex = 2
+      let avatarUrl = null
+      let screenshotBuffer = null
+      for (let i = tweetStart; i < arrayText.length; i++) {
         if (arrayText[i] == '·' && arrayText[i + 2] == ' Views') {
           tweetIndex = i - 2
           timeIndex = i - 1
           likesIndex = i + 7
           rtIndex = i + 3
           break
+        } else if (arrayText[i] == ' Views') {
+          tweetStart = 10
+          name = arrayText[8]
+          handle = arrayText[9]
+          tweetIndex = i - 4
+          timeIndex = i - 3
+          likesIndex = i + 5
+          rtIndex = i + 1
+          imgIndex = 4
+          break
         }
       }
       time = arrayText[timeIndex]
       likes = arrayText[likesIndex]
       retweet = arrayText[rtIndex]
-      for (let i = 6; i < tweetIndex + 1; i++) {
+      for (let i = tweetStart; i < tweetIndex + 1; i++) {
         tweet = tweet.concat(arrayText[i])
         tweet = tweet.concat('\n')
       }
-
-      let screenshotBuffer = null
+      if (!tweet || tweet.trim().length === 0) {
+        tweet = 'Content not available'
+      }
       const articleElement = await page.$('article')
-      if (articleElement) {
-        const avatars = (await page.$x(
-          '(//article//img)[1]'
-        )) as ElementHandle<Element>[]
 
-        const [imgElement] = await page.$x('(//article//img)[2]')
-        if (imgElement) {
-          screenshotBuffer = await imgElement.screenshot()
-        } else {
-          console.log('No img tag found within the article')
-        }
-        if (avatars.length > 0) {
-          const avatar: ElementHandle<Element> = avatars[0]
-          const imgSrc: string | null = await avatar.evaluate((el) =>
-            el.getAttribute('src')
-          )
-          avatarUrl = imgSrc
-          console.log(imgSrc)
-        } else {
-          console.log('No img tag found within the article')
-        }
+      if (articleElement) {
+        const avatarPromise = page.$x('(//article//img)[1]').then((avatars) => {
+          if (avatars.length > 0) {
+            const avatar = avatars[0] as ElementHandle<Element>
+            return avatar.evaluate((el) => el.getAttribute('src'))
+          }
+          return null
+        })
+
+        const screenshotPromise = page
+          .$x(`(//article//img)[${imgIndex}]`)
+          .then((elements) => {
+            const imgElement = elements[0]
+            return imgElement ? imgElement.screenshot() : null
+          })
+
+        const results = await Promise.allSettled([
+          avatarPromise,
+          screenshotPromise,
+        ])
+
+        const avatarResult = results[0]
+        const screenshotResult = results[1]
+
+        avatarUrl =
+          avatarResult.status === 'fulfilled' ? avatarResult.value : null
+        screenshotBuffer =
+          screenshotResult.status === 'fulfilled'
+            ? screenshotResult.value
+            : null
       } else {
         console.log('Article tag not found')
       }
+
       const embed = new EmbedBuilder()
         .setAuthor({
           name: name + ' (' + handle + ')',
@@ -133,6 +146,7 @@ client.on('messageCreate', async (message) => {
           { name: 'Likes', value: likes, inline: true },
           { name: 'Retweets', value: retweet, inline: true }
         )
+
       if (screenshotBuffer !== null) {
         await message.reply({
           embeds: [embed],
@@ -145,10 +159,10 @@ client.on('messageCreate', async (message) => {
       }
 
       await browser.close()
-      url = null
     } catch (error) {
       console.error('Error taking screenshot:', error)
     }
   }
 })
+
 client.login(process.env.TOKEN)
