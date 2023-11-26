@@ -53,7 +53,9 @@ client.on('messageCreate', async (message) => {
         '*',
         (el) => (el as HTMLElement).innerText
       )
+
       let arrayText = extractedText.split('\n')
+      console.log(arrayText)
       let name = arrayText[4]
       let handle = arrayText[5]
       let tweet = ''
@@ -66,10 +68,12 @@ client.on('messageCreate', async (message) => {
       let retweet = null
       let tweetStart = 6
       let imgIndex = 2
-      let avatarUrl = null
-      let screenshotBuffer = null
       for (let i = tweetStart; i < arrayText.length; i++) {
-        if (arrayText[i] == '·' && arrayText[i + 2] == ' Views') {
+        if (
+          arrayText[i] == '·' &&
+          arrayText[i + 2] == ' Views' &&
+          arrayText[4] !== 'Settings'
+        ) {
           tweetIndex = i - 2
           timeIndex = i - 1
           likesIndex = i + 7
@@ -97,6 +101,8 @@ client.on('messageCreate', async (message) => {
       if (!tweet || tweet.trim().length === 0) {
         tweet = 'Content not available'
       }
+      let avatarUrl = null
+      let screenshotBuffer = null
       const articleElement = await page.$('article')
 
       if (articleElement) {
